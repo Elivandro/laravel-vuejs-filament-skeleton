@@ -1,0 +1,183 @@
+<?php
+
+declare(strict_types = 1);
+
+namespace App\Providers;
+
+use Stancl\Tenancy\Events\CreatingTenant;
+use Stancl\Tenancy\Events\SavingTenant;
+use Stancl\Tenancy\Events\TenantSaved;
+use Stancl\Tenancy\Events\UpdatingTenant;
+use Stancl\Tenancy\Events\TenantUpdated;
+use Stancl\Tenancy\Events\DeletingTenant;
+use Stancl\Tenancy\Events\CreatingDomain;
+use Stancl\Tenancy\Events\DomainCreated;
+use Stancl\Tenancy\Events\SavingDomain;
+use Stancl\Tenancy\Events\DomainSaved;
+use Stancl\Tenancy\Events\UpdatingDomain;
+use Stancl\Tenancy\Events\DomainUpdated;
+use Stancl\Tenancy\Events\DeletingDomain;
+use Stancl\Tenancy\Events\DomainDeleted;
+use Stancl\Tenancy\Events\DatabaseCreated;
+use Stancl\Tenancy\Events\DatabaseMigrated;
+use Stancl\Tenancy\Events\DatabaseSeeded;
+use Stancl\Tenancy\Events\DatabaseRolledBack;
+use Stancl\Tenancy\Events\DatabaseDeleted;
+use Stancl\Tenancy\Events\InitializingTenancy;
+use Stancl\Tenancy\Events\TenancyInitialized;
+use Stancl\Tenancy\Listeners\BootstrapTenancy;
+use Stancl\Tenancy\Events\EndingTenancy;
+use Stancl\Tenancy\Events\TenancyEnded;
+use Stancl\Tenancy\Listeners\RevertToCentralContext;
+use Stancl\Tenancy\Events\BootstrappingTenancy;
+use Stancl\Tenancy\Events\TenancyBootstrapped;
+use Stancl\Tenancy\Events\RevertingToCentralContext;
+use Stancl\Tenancy\Events\RevertedToCentralContext;
+use Stancl\Tenancy\Events\SyncedResourceSaved;
+use Stancl\Tenancy\Listeners\UpdateSyncedResource;
+use Stancl\Tenancy\Events\SyncedResourceChangedInForeignDatabase;
+use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
+use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
+use Stancl\Tenancy\Middleware\InitializeTenancyBySubdomain;
+use Stancl\Tenancy\Middleware\InitializeTenancyByDomainOrSubdomain;
+use Stancl\Tenancy\Middleware\InitializeTenancyByPath;
+use Stancl\Tenancy\Middleware\InitializeTenancyByRequestData;
+use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\ServiceProvider;
+use Stancl\JobPipeline\JobPipeline;
+use Stancl\Tenancy\Events;
+use Stancl\Tenancy\Jobs;
+use Stancl\Tenancy\Listeners;
+use Stancl\Tenancy\Middleware;
+
+final class TenancyServiceProvider extends ServiceProvider
+{
+    // By default, no namespace is used to support the callable array syntax.
+    public static string $controllerNamespace = '';
+
+    public function events()
+    {
+        return [
+            // Tenant events
+            CreatingTenant::class => [],
+            //            Events\TenantCreated::class  => [
+            //                JobPipeline::make([
+            //                    Jobs\CreateDatabase::class,
+            //                    Jobs\MigrateDatabase::class,
+            //                    Jobs\SeedDatabase::class,
+
+            // Your own jobs to prepare the tenant.
+            // Provision API keys, create S3 buckets, anything you want!
+
+            //                ])->send(fn (Events\TenantCreated $event) => $event->tenant)->shouldBeQueued(false), // `false` by default, but you probably want to make this `true` for production.
+            //            ],
+            SavingTenant::class   => [],
+            TenantSaved::class    => [],
+            UpdatingTenant::class => [],
+            TenantUpdated::class  => [],
+            DeletingTenant::class => [],
+            //            Events\TenantDeleted::class  => [
+            //                JobPipeline::make([
+            //                    Jobs\DeleteDatabase::class,
+            //                ])->send(fn (Events\TenantDeleted $event) => $event->tenant)->shouldBeQueued(false), // `false` by default, but you probably want to make this `true` for production.
+            //            ],
+
+            // Domain events
+            CreatingDomain::class => [],
+            DomainCreated::class  => [],
+            SavingDomain::class   => [],
+            DomainSaved::class    => [],
+            UpdatingDomain::class => [],
+            DomainUpdated::class  => [],
+            DeletingDomain::class => [],
+            DomainDeleted::class  => [],
+
+            // Database events
+            DatabaseCreated::class    => [],
+            DatabaseMigrated::class   => [],
+            DatabaseSeeded::class     => [],
+            DatabaseRolledBack::class => [],
+            DatabaseDeleted::class    => [],
+
+            // Tenancy events
+            InitializingTenancy::class => [],
+            TenancyInitialized::class  => [
+                BootstrapTenancy::class,
+            ],
+
+            EndingTenancy::class => [],
+            TenancyEnded::class  => [
+                RevertToCentralContext::class,
+            ],
+
+            BootstrappingTenancy::class      => [],
+            TenancyBootstrapped::class       => [],
+            RevertingToCentralContext::class => [],
+            RevertedToCentralContext::class  => [],
+
+            // Resource syncing
+            SyncedResourceSaved::class => [
+                UpdateSyncedResource::class,
+            ],
+
+            // Fired only when a synced resource is changed in a different DB than the origin DB (to avoid infinite loops)
+            SyncedResourceChangedInForeignDatabase::class => [],
+        ];
+    }
+
+    public function register(): void
+    {
+
+    }
+
+    public function boot(): void
+    {
+        $this->bootEvents();
+        $this->mapRoutes();
+
+        $this->makeTenancyMiddlewareHighestPriority();
+    }
+
+    protected function bootEvents(): void
+    {
+        foreach ($this->events() as $event => $listeners) {
+            foreach ($listeners as $listener) {
+                if ($listener instanceof JobPipeline) {
+                    $listener = $listener->toListener();
+                }
+
+                Event::listen($event, $listener);
+            }
+        }
+    }
+
+    protected function mapRoutes(): void
+    {
+        $this->app->booted(function (): void {
+            if (file_exists(base_path('routes/tenant.php'))) {
+                Route::namespace(static::$controllerNamespace)
+                    ->group(base_path('routes/tenant.php'));
+            }
+        });
+    }
+
+    protected function makeTenancyMiddlewareHighestPriority(): void
+    {
+        $tenancyMiddleware = [
+            // Even higher priority than the initialization middleware
+            PreventAccessFromCentralDomains::class,
+
+            InitializeTenancyByDomain::class,
+            InitializeTenancyBySubdomain::class,
+            InitializeTenancyByDomainOrSubdomain::class,
+            InitializeTenancyByPath::class,
+            InitializeTenancyByRequestData::class,
+        ];
+
+        foreach (array_reverse($tenancyMiddleware) as $middleware) {
+            $this->app[Kernel::class]->prependToMiddlewarePriority($middleware);
+        }
+    }
+}
