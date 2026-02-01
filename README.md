@@ -14,7 +14,7 @@ Gere a chave para a aplicação:
 
 _Você pode simplesmente executar `Make` no terminal, caso tenha um ambiente linux com o [Docker](docs/docker.md) instalado para automatizar os passos anteriores. <b>(O [Docker](docs/docker.md) é extremamente necessario para o funcionamento do projeto)</b>_
 
-[Configurando um alias de shell para o Sail do Laravel](https://laravel.com/docs/12.x/sail#configuring-a-shell-alias)
+### [Configurando um alias de shell para o Sail do Laravel](docs/sail.md)
 
 Antes de executar as migrações, acesse o [Minio](http://localhost:9000/). Crie o bucket `public/` e deixe como público para que o laravel tenha livre acesso. As credênciais estão no .env:
 
