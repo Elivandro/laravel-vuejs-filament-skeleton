@@ -1,7 +1,7 @@
 # Executando o projeto
 
 Renomeie o .env.example:
-`cp -n .env.example .env`
+`cp --update=none .env.example .env`
 
 Instale as dependências do composer:
 `composer install --ignore-platform-reqs`
@@ -12,7 +12,7 @@ Instale as dependências do NPM:
 Gere a chave para a aplicação:
 `php artisan key:generate`
 
-você pode simplesmente executar `Make` no terminal, caso tenha em um ambiente linux com o [Docker](docs/docker.md) instalado para automatizar os passos anteriores. <b>(O [Docker](docs/docker.md) é extremamente necessario para o funcionamento do projeto)</b>
+_Você pode simplesmente executar `Make` no terminal, caso tenha um ambiente linux com o [Docker](docs/docker.md) instalado para automatizar os passos anteriores. <b>(O [Docker](docs/docker.md) é extremamente necessario para o funcionamento do projeto)</b>_
 
 [Configurando um alias de shell para o Sail do Laravel](https://laravel.com/docs/12.x/sail#configuring-a-shell-alias)
 
